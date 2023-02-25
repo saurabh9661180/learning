@@ -1,0 +1,55 @@
+import logging
+import telegram
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+from datetime import datetime, timedelta
+
+# Set up logging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                     level=logging.INFO)
+
+# Create a Telegram bot object
+bot = telegram.Bot(token='YOUR_BOT_TOKEN')
+
+# Define the command handlers
+def start(update, context):
+    """Send a message when the command /start is issued."""
+    update.message.reply_text('Hi! I am a chat lock and unlock duration bot. To lock a chat, use the /lock command. To unlock a chat, use the /unlock command.')
+
+def lock(update, context):
+    """Lock the current chat and set a timer to unlock it after a specified duration."""
+    chat_id = update.message.chat_id
+    if 'lock_time' in context.chat_data:
+        update.message.reply_text('This chat is already locked.')
+        return
+    duration = int(context.args[0])
+    lock_time = datetime.now() + timedelta(minutes=duration)
+    context.chat_data['lock_time'] = lock_time
+    update.message.reply_text(f'This chat has been locked for {duration} minutes. It will be unlocked at {lock_time}.')
+    bot.restrict_chat_member(chat_id, bot.id, until_date=lock_time.timestamp(), can_send_messages=False)
+
+def unlock(update, context):
+    """Unlock the current chat if it is locked."""
+    chat_id = update.message.chat_id
+    if 'lock_time' not in context.chat_data:
+        update.message.reply_text('This chat is not locked.')
+        return
+    lock_time = context.chat_data['lock_time']
+    del context.chat_data['lock_time']
+    update.message.reply_text(f'This chat has been unlocked.')
+    bot.restrict_chat_member(chat_id, bot.id, until_date=datetime.now().timestamp(), can_send_messages=True)
+
+def echo(update, context):
+    """Echo the user's message."""
+    update.message.reply_text(update.message.text)
+
+# Set up the command handlers
+updater = Updater(token='YOUR_BOT_TOKEN', use_context=True)
+dispatcher = updater.dispatcher
+dispatcher.add_handler(CommandHandler('start', start))
+dispatcher.add_handler(CommandHandler('lock', lock, pass_args=True, pass_chat_data=True))
+dispatcher.add_handler(CommandHandler('unlock', unlock, pass_chat_data=True))
+dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
+
+# Start the bot
+updater.start_polling()
+updater.idle()
